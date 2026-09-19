@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { mockVesselEnquiries } from '@/data/mockData'
+import { api } from '@/lib/api'
 import { formatNumber, getStatusColor } from '@/lib/utils'
 import type { VesselEnquiry } from '@/types'
 
@@ -27,10 +27,21 @@ export default function VesselEnquiries() {
   const [filteredEnquiries, setFilteredEnquiries] = useState<VesselEnquiry[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setEnquiries(mockVesselEnquiries)
-    setFilteredEnquiries(mockVesselEnquiries)
+    const fetchData = async () => {
+      try {
+        const data = await api.getVesselEnquiries()
+        setEnquiries(data)
+        setFilteredEnquiries(data)
+      } catch (err) {
+        console.error('Failed to fetch vessel enquiries:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
   }, [])
 
   useEffect(() => {
@@ -40,16 +51,26 @@ export default function VesselEnquiries() {
       filtered = filtered.filter(
         (e) =>
           e.vesselName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          e.vesselType.toLowerCase().includes(searchTerm.toLowerCase()) ||
           e.openPort.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
     if (statusFilter !== 'all') {
-      filtered = filtered.filter((e) => e.status === statusFilter)
+      filtered = filtered.filter((e) => e.status.toLowerCase() === statusFilter.toLowerCase())
     }
 
     setFilteredEnquiries(filtered)
   }, [searchTerm, statusFilter, enquiries])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading vessel enquiries...</span>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

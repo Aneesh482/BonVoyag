@@ -25,17 +25,79 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { mockDashboardSummary } from '@/data/mockData'
+import { api } from '@/lib/api'
 import { formatCurrency, formatNumber, getStatusColor, getPriorityColor } from '@/lib/utils'
 import { Link } from 'react-router-dom'
+import type { DashboardSummary } from '@/types'
+
 const INR_TO_USD = 83.5
+
+const defaultData: DashboardSummary = {
+  kpis: {
+    currentFreight: 0,
+    forecastFreight: 0,
+    freightTrend: 0,
+    availableVessels: 0,
+    activeCargoEnquiries: 0,
+    activeVesselEnquiries: 0,
+    portCongestionIndex: 0,
+    estimatedSavings: 0,
+  },
+  charts: {
+    freightHistory: [],
+    marketTrend: [],
+    vesselAvailability: [],
+    portCongestion: [],
+    supplyDemand: [],
+  },
+  activeEnquiries: { cargo: [], vessel: [] },
+  recommendedActions: [],
+  marketSummary: [],
+}
+
 export default function Dashboard() {
-  const [data, setData] = useState(mockDashboardSummary)
+  const [data, setData] = useState<DashboardSummary>(defaultData)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // In production, fetch from API
-    setData(mockDashboardSummary)
+    const fetchDashboard = async () => {
+      try {
+        setLoading(true)
+        const summary = await api.getDashboardSummary()
+        setData(summary)
+        setError(null)
+      } catch (err: any) {
+        console.error('Dashboard fetch error:', err)
+        setError('Failed to load dashboard data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDashboard()
   }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading dashboard...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+          <p className="text-red-600 dark:text-red-400">{error}</p>
+          <p className="text-sm text-gray-500 mt-2">Make sure the backend is running on port 5000</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -103,7 +165,7 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle>Freight Rate Trend & Forecast</CardTitle>
             <CardDescription>
-              Historical rates with 3-week forecast
+              Historical rates from database
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -189,6 +251,11 @@ export default function Dashboard() {
                 )}
               </div>
             ))}
+            {data.recommendedActions.length === 0 && (
+              <p className="text-gray-500 dark:text-gray-400 text-center py-4">
+                No recommendations yet. Run an optimization to see results.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -201,7 +268,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Active Cargo Enquiries</CardTitle>
-                <CardDescription>Recent cargo requirements</CardDescription>
+                <CardDescription>Shipments from database</CardDescription>
               </div>
               <Link to="/enquiries/cargo">
                 <Button size="sm" variant="outline">
@@ -229,11 +296,16 @@ export default function Dashboard() {
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     {cargo.origin} → {cargo.destination}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                    Laycan: {new Date(cargo.laycanStart).toLocaleDateString()} - {new Date(cargo.laycanEnd).toLocaleDateString()}
-                  </div>
+                  {cargo.laycanStart && (
+                    <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                      Laycan: {new Date(cargo.laycanStart).toLocaleDateString()} - {cargo.laycanEnd ? new Date(cargo.laycanEnd).toLocaleDateString() : 'N/A'}
+                    </div>
+                  )}
                 </Link>
               ))}
+              {data.activeEnquiries.cargo.length === 0 && (
+                <p className="text-gray-500 text-center py-4">No active cargo enquiries</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -271,11 +343,11 @@ export default function Dashboard() {
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     {vessel.vesselType} - {formatNumber(vessel.dwt)} DWT
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                    Open: {new Date(vessel.openDate).toLocaleDateString()} at {vessel.openPort}
-                  </div>
                 </div>
               ))}
+              {data.activeEnquiries.vessel.length === 0 && (
+                <p className="text-gray-500 text-center py-4">No active vessel enquiries</p>
+              )}
             </div>
           </CardContent>
         </Card>

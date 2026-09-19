@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { mockCargoEnquiries } from '@/data/mockData'
+import { api } from '@/lib/api'
 import { formatNumber, getStatusColor, getPriorityColor } from '@/lib/utils'
 import type { CargoEnquiry } from '@/types'
 
@@ -29,10 +29,21 @@ export default function CargoEnquiries() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [cargoTypeFilter, setCargoTypeFilter] = useState<string>('all')
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setEnquiries(mockCargoEnquiries)
-    setFilteredEnquiries(mockCargoEnquiries)
+    const fetchData = async () => {
+      try {
+        const data = await api.getCargoEnquiries()
+        setEnquiries(data)
+        setFilteredEnquiries(data)
+      } catch (err) {
+        console.error('Failed to fetch cargo enquiries:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
   }, [])
 
   useEffect(() => {
@@ -48,15 +59,24 @@ export default function CargoEnquiries() {
     }
 
     if (statusFilter !== 'all') {
-      filtered = filtered.filter((e) => e.status === statusFilter)
+      filtered = filtered.filter((e) => e.status.toLowerCase() === statusFilter.toLowerCase())
     }
 
     if (cargoTypeFilter !== 'all') {
-      filtered = filtered.filter((e) => e.cargoType === cargoTypeFilter)
+      filtered = filtered.filter((e) => e.cargoType.toLowerCase() === cargoTypeFilter.toLowerCase())
     }
 
     setFilteredEnquiries(filtered)
   }, [searchTerm, statusFilter, cargoTypeFilter, enquiries])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading cargo enquiries...</span>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

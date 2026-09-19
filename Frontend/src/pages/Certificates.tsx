@@ -10,13 +10,25 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { mockCertificates } from '@/data/mockData'
+import { api } from '@/lib/api'
 import { getStatusColor } from '@/lib/utils'
 
 export default function Certificates() {
-  const [certificates, setCertificates] = useState(mockCertificates)
+  const [certificates, setCertificates] = useState([])
   const [expiringSoon, setExpiringSoon] = useState(0)
   const [expired, setExpired] = useState(0)
+
+  useEffect(() => {
+    const fetchCertificates = async () => {
+      try {
+        const data = await api.getCertificates()
+        setCertificates(data)
+      } catch (err) {
+        console.error('Failed to fetch certificates:', err)
+      }
+    }
+    fetchCertificates()
+  }, [])
 
   useEffect(() => {
     setExpiringSoon(

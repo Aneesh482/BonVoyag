@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Ship, Anchor, AlertCircle, Layers } from 'lucide-react'
-import { mockVessels, mockPorts } from '@/data/mockData'
+import { api } from '@/lib/api'
 import { formatNumber, getStatusColor, getCongestionColor } from '@/lib/utils'
 import type { Vessel, Port } from '@/types'
 
@@ -81,8 +81,31 @@ export default function LiveMap() {
   const [selectedPort, setSelectedPort] = useState<Port | null>(null)
 
   useEffect(() => {
-    setVessels(mockVessels.filter((v) => v.currentLocation))
-    setPorts(mockPorts)
+    const fetchData = async () => {
+      try {
+        const [vesselsData, portsData] = await Promise.all([
+          api.getVesselPositions(),
+          api.getPorts(),
+        ])
+        
+        // Add random coordinates to vessels for demonstration on the map
+        // since DB doesn't track live GPS positions
+        const vesselsWithLocation = vesselsData.map((v: any, index: number) => ({
+          ...v,
+          currentLocation: {
+            lat: 20 + (Math.random() * 20 - 10),
+            lng: 85 + (Math.random() * 20 - 10),
+            name: 'At Sea'
+          }
+        }))
+        
+        setVessels(vesselsWithLocation)
+        setPorts(portsData)
+      } catch (err) {
+        console.error('Failed to fetch map data:', err)
+      }
+    }
+    fetchData()
   }, [])
 
   // Sample route from Newcastle to Paradip

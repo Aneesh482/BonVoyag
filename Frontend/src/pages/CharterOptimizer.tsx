@@ -1,52 +1,81 @@
-import { useState } from 'react'
-import { Settings, AlertCircle, TrendingDown, CheckCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Settings, AlertCircle, TrendingDown, CheckCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { mockCargoEnquiries } from '@/data/mockData'
+import { api } from '@/lib/api'
 import { formatCurrency, formatNumber, getRiskColor } from '@/lib/utils'
 
 export default function CharterOptimizer() {
   const [selectedCargo, setSelectedCargo] = useState('')
   const [recommendation, setRecommendation] = useState<any>(null)
+  const [shipments, setShipments] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [loadingShipments, setLoadingShipments] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const generateRecommendation = () => {
-    // Mock recommendation
-    setRecommendation({
-      action: 'Wait',
-      waitDays: 12,
-      recommendedVessel: 'Panamax',
-      currentFreight: 24.8,
-      expectedFreight: 22.9,
-      savings: 152000,
-      totalCost: 2740000,
-      risk: 'Medium',
-      confidence: 84,
-      comparison: [
-        {
-          option: 'Charter Now - Panamax',
-          freight: 24.8,
-          totalCost: 2892000,
-          savings: 0,
-          score: 72,
-        },
-        {
-          option: 'Wait 10-14 Days - Panamax',
-          freight: 22.9,
-          totalCost: 2740000,
-          savings: 152000,
-          score: 94,
-        },
-        {
-          option: 'Charter Now - Supramax',
-          freight: 26.2,
-          totalCost: 3048000,
-          savings: -156000,
-          score: 65,
-        },
-      ],
-    })
+  useEffect(() => {
+    const fetchShipments = async () => {
+      try {
+        setLoadingShipments(true)
+        const data = await api.getCargoEnquiries()
+        setShipments(data)
+      } catch (err: any) {
+        console.error('Failed to fetch shipments:', err)
+      } finally {
+        setLoadingShipments(false)
+      }
+    }
+    fetchShipments()
+  }, [])
+
+  const generateRecommendation = async () => {
+    if (!selectedCargo) return
+
+    try {
+      setLoading(true)
+      setError(null)
+      const result = await api.getCharterRecommendation(selectedCargo)
+      
+      // Map ML Engine result to UI format
+      setRecommendation({
+        action: 'Charter Now',
+        waitDays: null,
+        recommendedVessel: result.vesselName || `Vessel ${result.recommendedVessel}`,
+        vesselId: result.recommendedVessel,
+        currentFreight: result.predictedFreightRate || 0,
+        expectedFreight: result.predictedFreightRate || 0,
+        savings: 0,
+        totalCost: result.totalCost || 0,
+        freightCost: result.freightCost || 0,
+        fuelCost: result.fuelCost || 0,
+        portCost: result.portCost || 0,
+        demurrageCost: result.demurrageCost || 0,
+        riskScore: result.riskScore || 0,
+        risk: result.riskScore > 0.7 ? 'High' : result.riskScore > 0.4 ? 'Medium' : 'Low',
+        confidence: Math.round((1 - (result.riskScore || 0)) * 100),
+        recommendedCharterDate: result.recommendedCharterDate || '',
+        recommendationReason: result.recommendationReason || '',
+        originPort: result.originPort || '',
+        destinationPort: result.destinationPort || '',
+        comparison: [
+          {
+            option: `Charter - ${result.vesselName || 'Recommended Vessel'}`,
+            freight: result.predictedFreightRate || 0,
+            totalCost: result.totalCost || 0,
+            savings: 0,
+            score: Math.round((1 - (result.riskScore || 0)) * 100),
+          },
+        ],
+      })
+    } catch (err: any) {
+      console.error('Optimization error:', err)
+      setError(err?.response?.data?.error || err.message || 'Optimization failed')
+      setRecommendation(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -57,7 +86,7 @@ export default function CharterOptimizer() {
           Charter Optimizer
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          AI-powered charter timing and vessel selection optimization
+          AI-powered charter timing and vessel selection optimization (connected to ML Engine)
         </p>
       </div>
 
@@ -68,27 +97,39 @@ export default function CharterOptimizer() {
             <Settings className="w-5 h-5" />
             Optimization Parameters
           </CardTitle>
-          <CardDescription>Select cargo to optimize charter decision</CardDescription>
+          <CardDescription>Select a shipment to optimize charter decision</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select value={selectedCargo} onValueChange={setSelectedCargo}>
               <SelectTrigger>
-                <SelectValue placeholder="Select cargo enquiry" />
+                <SelectValue placeholder={loadingShipments ? 'Loading shipments...' : 'Select shipment'} />
               </SelectTrigger>
               <SelectContent>
-                {mockCargoEnquiries.map((cargo) => (
+                {shipments.map((cargo) => (
                   <SelectItem key={cargo.id} value={cargo.id}>
-                    {cargo.id.toUpperCase()} - {cargo.cargoType} {formatNumber(cargo.quantity)} MT
+                    #{cargo.id} - {cargo.cargoType} {formatNumber(cargo.quantity)} MT
                     ({cargo.origin} → {cargo.destination})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button onClick={generateRecommendation} disabled={!selectedCargo}>
-              Optimize Charter
+            <Button onClick={generateRecommendation} disabled={!selectedCargo || loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Running ML Optimization...
+                </>
+              ) : (
+                'Optimize Charter'
+              )}
             </Button>
           </div>
+          {error && (
+            <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg text-sm text-red-600 dark:text-red-400">
+              {error}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -99,7 +140,7 @@ export default function CharterOptimizer() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CheckCircle className="w-6 h-6 text-blue-600" />
-                Recommended Option
+                ML Engine Recommendation
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -107,21 +148,7 @@ export default function CharterOptimizer() {
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Recommended Action
-                    </label>
-                    <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">
-                      {recommendation.action.toUpperCase()}
-                    </div>
-                    {recommendation.waitDays && (
-                      <p className="text-lg text-gray-700 dark:text-gray-300 mt-1">
-                        {recommendation.waitDays} Days
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Recommended Vessel Type
+                      Recommended Vessel
                     </label>
                     <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">
                       {recommendation.recommendedVessel}
@@ -133,22 +160,29 @@ export default function CharterOptimizer() {
                       Route
                     </label>
                     <div className="text-lg text-gray-900 dark:text-gray-100 mt-1">
-                      Newcastle → Paradip
+                      {recommendation.originPort} → {recommendation.destinationPort}
                     </div>
                   </div>
+
+                  {recommendation.recommendedCharterDate && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Recommended Charter Date
+                      </label>
+                      <div className="text-lg text-gray-900 dark:text-gray-100 mt-1">
+                        {new Date(recommendation.recommendedCharterDate).toLocaleDateString()}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4">
                   <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
                     <div className="text-sm text-gray-600 dark:text-gray-400">
-                      Expected Freight Rate
+                      Predicted Freight Rate
                     </div>
                     <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                       {formatCurrency(recommendation.expectedFreight)}/MT
-                    </div>
-                    <div className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1 mt-1">
-                      <TrendingDown className="w-4 h-4" />
-                      {formatCurrency(recommendation.currentFreight - recommendation.expectedFreight)} lower than current
                     </div>
                   </div>
 
@@ -157,20 +191,36 @@ export default function CharterOptimizer() {
                       Estimated Total Cost
                     </div>
                     <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                      {formatCurrency(recommendation.totalCost / 1000000, 'USD')}M
+                      {formatCurrency(recommendation.totalCost)}
                     </div>
                   </div>
+                </div>
+              </div>
 
-                  <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                      Estimated Savings
-                    </div>
-                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      {formatCurrency(recommendation.savings)}
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      vs chartering now
-                    </div>
+              {/* Cost Breakdown */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
+                <div>
+                  <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Freight Cost</label>
+                  <div className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                    {formatCurrency(recommendation.freightCost)}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Fuel Cost</label>
+                  <div className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                    {formatCurrency(recommendation.fuelCost)}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Port Cost</label>
+                  <div className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                    {formatCurrency(recommendation.portCost)}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Demurrage</label>
+                  <div className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                    {formatCurrency(recommendation.demurrageCost)}
                   </div>
                 </div>
               </div>
@@ -182,7 +232,7 @@ export default function CharterOptimizer() {
                   </label>
                   <div className="mt-1">
                     <Badge className={getRiskColor(recommendation.risk)}>
-                      {recommendation.risk}
+                      {recommendation.risk} ({(recommendation.riskScore * 100).toFixed(0)}%)
                     </Badge>
                   </div>
                 </div>
@@ -198,73 +248,6 @@ export default function CharterOptimizer() {
             </CardContent>
           </Card>
 
-          {/* Option Comparison */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Option Comparison</CardTitle>
-              <CardDescription>All evaluated charter options</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {recommendation.comparison.map((option: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className={`p-4 rounded-lg border-2 ${
-                      option.score >= 90
-                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                        : 'border-gray-200 dark:border-gray-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="font-semibold text-gray-900 dark:text-gray-100">
-                            {option.option}
-                          </div>
-                          {option.score >= 90 && (
-                            <Badge className="bg-green-600 text-white">
-                              Recommended
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-4 gap-4 text-sm">
-                          <div>
-                            <span className="text-gray-600 dark:text-gray-400">Freight:</span>
-                            <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                              {formatCurrency(option.freight)}/MT
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600 dark:text-gray-400">Total Cost:</span>
-                            <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                              {formatCurrency(option.totalCost / 1000000, 'USD')}M
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600 dark:text-gray-400">Savings:</span>
-                            <span className={`ml-2 font-medium ${
-                              option.savings > 0
-                                ? 'text-green-600 dark:text-green-400'
-                                : 'text-red-600 dark:text-red-400'
-                            }`}>
-                              {option.savings > 0 ? '+' : ''}{formatCurrency(option.savings)}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600 dark:text-gray-400">Score:</span>
-                            <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                              {option.score}/100
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Insights */}
           <Card>
             <CardHeader>
@@ -275,25 +258,7 @@ export default function CharterOptimizer() {
                 <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                   <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                   <div className="text-sm text-gray-700 dark:text-gray-300">
-                    Market analysis indicates freight rates will decline over the next 10-14 days.
-                    Waiting for this period could result in significant cost savings of approximately
-                    {' '}{formatCurrency(recommendation.savings)}.
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-gray-700 dark:text-gray-300">
-                    {recommendation.recommendedVessel} vessels show optimal capacity fit and availability
-                    for your cargo requirements. Current vessel supply in this segment is adequate.
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-gray-700 dark:text-gray-300">
-                    Risk level is {recommendation.risk.toLowerCase()} - market volatility exists but
-                    forecast confidence is high. Monitor daily for any significant market shifts.
+                    {recommendation.recommendationReason || 'Optimization complete. The ML engine has evaluated all feasible vessels and selected the best option based on cost, risk, and timing.'}
                   </div>
                 </div>
               </div>
@@ -302,12 +267,12 @@ export default function CharterOptimizer() {
         </>
       )}
 
-      {!recommendation && (
+      {!recommendation && !loading && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Settings className="w-16 h-16 text-gray-400 mb-4" />
             <p className="text-gray-600 dark:text-gray-400 text-center">
-              Select a cargo enquiry to generate charter optimization recommendation
+              Select a shipment to run ML-powered charter optimization
             </p>
           </CardContent>
         </Card>

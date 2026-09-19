@@ -4,7 +4,7 @@ import { ArrowLeft, Ship, TrendingDown, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { mockCargoEnquiries, mockVessels } from '@/data/mockData'
+import { api } from '@/lib/api'
 import { formatNumber, formatCurrency, getStatusColor, getPriorityColor } from '@/lib/utils'
 import type { CargoEnquiry, Vessel } from '@/types'
 
@@ -13,15 +13,33 @@ export default function CargoDetail() {
   const navigate = useNavigate()
   const [cargo, setCargo] = useState<CargoEnquiry | null>(null)
   const [matchedVessels, setMatchedVessels] = useState<Vessel[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const found = mockCargoEnquiries.find((c) => c.id === id)
-    if (found) {
-      setCargo(found)
-      // Mock matched vessels
-      setMatchedVessels(mockVessels.filter((v) => v.status === 'Available').slice(0, 3))
+    const fetchData = async () => {
+      try {
+        if (!id) return
+        const cargoData = await api.getCargoEnquiry(id)
+        setCargo(cargoData)
+        const vessels = await api.getVessels()
+        setMatchedVessels(vessels.filter((v: any) => v.status === 'Available').slice(0, 3))
+      } catch (err) {
+        console.error('Failed to load cargo detail:', err)
+      } finally {
+        setLoading(false)
+      }
     }
+    fetchData()
   }, [id])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading cargo details...</span>
+      </div>
+    )
+  }
 
   if (!cargo) {
     return (

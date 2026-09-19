@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts'
 import { CARGO_TYPES, VESSEL_TYPES, FORECAST_HORIZONS } from '@/lib/constants'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
+import { api } from '@/lib/api'
 
 export default function FreightForecast() {
   const [commodity, setCommodity] = useState('Coal')
@@ -15,39 +16,27 @@ export default function FreightForecast() {
   const [vesselType, setVesselType] = useState('Panamax')
   const [horizon, setHorizon] = useState('30d')
   const [forecast, setForecast] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const generateForecast = () => {
-    // Mock forecast data
-    const currentRate = 24.8
-    const forecastRate = 22.9
-    const change = ((forecastRate - currentRate) / currentRate) * 100
-
-    const historicalData = [
-      { date: '2026-08-01', rate: 28.5, type: 'historical' },
-      { date: '2026-08-08', rate: 27.2, type: 'historical' },
-      { date: '2026-08-15', rate: 26.8, type: 'historical' },
-      { date: '2026-08-22', rate: 25.9, type: 'historical' },
-      { date: '2026-08-29', rate: 24.8, type: 'historical' },
-    ]
-
-    const forecastData = [
-      { date: '2026-09-05', rate: 24.2, confidence: 92, type: 'forecast' },
-      { date: '2026-09-12', rate: 23.5, confidence: 87, type: 'forecast' },
-      { date: '2026-09-19', rate: 23.1, confidence: 82, type: 'forecast' },
-      { date: '2026-09-26', rate: 22.9, confidence: 78, type: 'forecast' },
-      { date: '2026-10-03', rate: 22.8, confidence: 72, type: 'forecast' },
-    ]
-
-    setForecast({
-      currentRate,
-      forecastRate,
-      change,
-      changeAmount: forecastRate - currentRate,
-      trend: change < 0 ? 'Decreasing' : 'Increasing',
-      confidence: 87,
-      volatility: 35,
-      data: [...historicalData, ...forecastData],
-    })
+  const generateForecast = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const result = await api.getFreightForecast({
+        commodity,
+        origin,
+        destination,
+        vesselType,
+        horizon,
+      })
+      setForecast(result)
+    } catch (err: any) {
+      console.error('Forecast error:', err)
+      setError(err?.response?.data?.error || 'Failed to generate forecast')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const allData = forecast?.data || []
@@ -133,7 +122,16 @@ export default function FreightForecast() {
               </SelectContent>
             </Select>
 
-            <Button onClick={generateForecast}>Generate Forecast</Button>
+            <Button onClick={generateForecast} disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                'Generate Forecast'
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>

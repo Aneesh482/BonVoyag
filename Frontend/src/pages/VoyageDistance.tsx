@@ -1,38 +1,60 @@
-import { useState } from 'react'
-import { Calculator, MapPin, Ship } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Calculator, MapPin, Ship, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ALL_PORTS, VESSEL_TYPES, AVG_VESSEL_SPEED } from '@/lib/constants'
+import { VESSEL_TYPES, AVG_VESSEL_SPEED } from '@/lib/constants'
 import { formatNumber, formatCurrency } from '@/lib/utils'
+import { api } from '@/lib/api'
 
 export default function VoyageDistance() {
   const [origin, setOrigin] = useState('')
   const [destination, setDestination] = useState('')
   const [vesselType, setVesselType] = useState('')
   const [result, setResult] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [ports, setPorts] = useState<any[]>([])
 
-  const calculateDistance = () => {
-    // Mock calculation - in production, call API
-    const distance = 4850 // nautical miles (Newcastle to Paradip)
-    const speed = AVG_VESSEL_SPEED
-    const sailingTime = distance / speed / 24 // days
-    const fuelConsumption = 30 // MT/day
-    const totalFuel = sailingTime * fuelConsumption
-    const fuelPrice = 650 // USD/MT
-    const fuelCost = totalFuel * fuelPrice
+  useEffect(() => {
+    api.getPorts().then(setPorts).catch(console.error)
+  }, [])
 
-    setResult({
-      distance,
-      sailingTime: Math.ceil(sailingTime),
-      speed,
-      fuelConsumption,
-      totalFuel: Math.round(totalFuel),
-      fuelCost: Math.round(fuelCost),
-      portCharges: 85000 + 125000,
-      canalCharges: 0,
-      totalCost: Math.round(fuelCost + 210000),
-    })
+  const calculateDistance = async () => {
+    try {
+      setLoading(true)
+      const routes = await api.getRoutes()
+      
+      const route = routes.find(
+        (r: any) => 
+          r.originPort === origin && 
+          r.destinationPort === destination
+      )
+
+      const distance = route ? route.distanceNm : 4850 // fallback if route not in DB
+      const speed = AVG_VESSEL_SPEED
+      const sailingTime = distance / speed / 24 // days
+      const fuelConsumption = 30 // MT/day
+      const totalFuel = sailingTime * fuelConsumption
+      const fuelPrice = 650 // USD/MT
+      const fuelCost = totalFuel * fuelPrice
+
+      setResult({
+        distance,
+        sailingTime: Math.ceil(sailingTime),
+        speed,
+        fuelConsumption,
+        totalFuel: Math.round(totalFuel),
+        fuelCost: Math.round(fuelCost),
+        portCharges: 85000 + 125000,
+        canalCharges: 0,
+        totalCost: Math.round(fuelCost + 210000),
+        routeCode: route ? route.routeCode : 'Unknown',
+      })
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -67,9 +89,9 @@ export default function VoyageDistance() {
                   <SelectValue placeholder="Select origin port" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ALL_PORTS.map((port) => (
-                    <SelectItem key={port} value={port}>
-                      {port}
+                  {ports.map((port) => (
+                    <SelectItem key={port.id} value={port.name}>
+                      {port.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -85,9 +107,9 @@ export default function VoyageDistance() {
                   <SelectValue placeholder="Select destination port" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ALL_PORTS.map((port) => (
-                    <SelectItem key={port} value={port}>
-                      {port}
+                  {ports.map((port) => (
+                    <SelectItem key={port.id} value={port.name}>
+                      {port.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

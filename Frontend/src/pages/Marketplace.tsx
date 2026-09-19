@@ -4,11 +4,35 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { mockMarketplaceItems } from '@/data/mockData'
+import { api } from '@/lib/api'
 import { formatNumber, formatCurrency } from '@/lib/utils'
 
 export default function Marketplace() {
-  const [items, setItems] = useState(mockMarketplaceItems)
+  const [items, setItems] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchItems = async () => {
+      try {
+        const result = await api.getMarketplaceItems()
+        setItems(result)
+      } catch (err) {
+        console.error('Failed to fetch marketplace items:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchItems()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading marketplace...</span>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

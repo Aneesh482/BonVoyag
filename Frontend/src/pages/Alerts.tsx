@@ -4,16 +4,40 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { mockAlerts } from '@/data/mockData'
+import { api } from '@/lib/api'
 import type { Alert } from '@/types'
 
 export default function Alerts() {
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts)
+  const [alerts, setAlerts] = useState<Alert[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const result = await api.getAlerts()
+        setAlerts(result)
+      } catch (err) {
+        console.error('Failed to fetch alerts:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAlerts()
+  }, [])
 
   useEffect(() => {
     setUnreadCount(alerts.filter((a) => !a.read).length)
   }, [alerts])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading alerts...</span>
+      </div>
+    )
+  }
 
   const markAsRead = (id: string) => {
     setAlerts(alerts.map((a) => (a.id === id ? { ...a, read: true } : a)))

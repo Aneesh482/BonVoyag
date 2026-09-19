@@ -3,15 +3,42 @@ import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { mockMarketData } from '@/data/mockData'
+import { api } from '@/lib/api'
 import { formatCurrency, formatNumber } from '@/lib/utils'
+import type { MarketData } from '@/types'
+
+const defaultData: MarketData = {
+  balticDryIndex: 0, capesizeIndex: 0, panamaxIndex: 0, supramaxIndex: 0, handysizeIndex: 0,
+  bunkerPrice: 0, commodityPrices: {}, exchangeRates: {}, vesselSupply: 0, cargoDemand: 0,
+  portCongestionIndex: 0, marketPressureScore: 0, keyDrivers: [], updatedAt: '',
+}
 
 export default function MarketIntelligence() {
-  const [data, setData] = useState(mockMarketData)
+  const [data, setData] = useState<MarketData>(defaultData)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setData(mockMarketData)
+    const fetchData = async () => {
+      try {
+        const result = await api.getMarketData()
+        setData(result)
+      } catch (err) {
+        console.error('Failed to fetch market data:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
   }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading market data...</span>
+      </div>
+    )
+  }
 
   const indexData = [
     { name: 'BDI', value: data.balticDryIndex, change: -2.3 },
